@@ -13,6 +13,10 @@ abstract class GenericList[+A] {
     def map[B](transformer: MyTransformer[A, B]): GenericList[B]
     def filter(predicate: MyPredicate[A]): GenericList[A]
     def flatMap[B](transformer: MyTransformer[A, GenericList[B]]): GenericList[B]
+
+    def sort(comp: (A, A) => Int): GenericList[A]
+    def zipWith[B, C](list: GenericList[B], zip: (A, B) => C): GenericList[C]
+    def fold[B](start: B)(operator: (B, A) => B): B
 }
 
 object Empty extends GenericList[Nothing] {
@@ -22,9 +26,16 @@ object Empty extends GenericList[Nothing] {
     override def add[A](element: A): GenericList[A] = new Cons[A](element, this)
     override def toString: String = ""
 
-    def map[B](transformer: MyTransformer[Nothing, B]): GenericList[B] = this
-    def filter(predicate: MyPredicate[Nothing]): GenericList[Nothing] = this
-    def flatMap[B](transformer: MyTransformer[Nothing, GenericList[B]]): GenericList[B] = this
+    override def map[B](transformer: MyTransformer[Nothing, B]): GenericList[B] = this
+    override def filter(predicate: MyPredicate[Nothing]): GenericList[Nothing] = this
+    override def flatMap[B](transformer: MyTransformer[Nothing, GenericList[B]]): GenericList[B] = this
+
+    override def sort(comp: (Nothing, Nothing) => Int): GenericList[Nothing] = Empty
+    override def zipWith[B, C](list: GenericList[B], zip: (Nothing, B) => C): GenericList[C] = 
+        if (!list.isEmpty) throw new RuntimeException("Zip of lists of different lengths")
+        else Empty
+
+    override def fold[B](start: B)(operator: (B, Nothing) => B): B = start
 }
 
 class Cons[+A](h: A, t: GenericList[A]) extends GenericList[A] {
@@ -66,6 +77,26 @@ class Cons[+A](h: A, t: GenericList[A]) extends GenericList[A] {
         val transformed_head: GenericList[B] = transformer(h)
         val transformed_tail: GenericList[B] = t.flatMap(transformer)
         concat(transformed_head, transformed_tail)
+    }
+
+    // comp(x, y) < 0: x, y
+    // comp(x, y) > 0: y, x
+    override def sort(comp: (A, A) => Int): GenericList[A] = {
+        if (t == Empty) this
+        else {
+            val sorted_tail = t.sort(comp)
+            if (comp(h, sorted_tail.head) < 0) new Cons[A](h, sorted_tail)
+            else new Cons(sorted_tail.head, (new Cons[A](h, sorted_tail.tail)).sort(comp))
+        }
+    }
+
+    override def zipWith[B, C](list: GenericList[B], zip: (A, B) => C): GenericList[C] = {
+        if (list.isEmpty) throw new RuntimeException("Lists of different lenghts")
+        else new Cons(zip(h, list.head), t.zipWith[B,C](list.tail, zip))
+    }
+
+    override def fold[B](start: B)(operator: (B, A) => B): B = {
+        t.fold(operator(start, h))(operator)
     }
 
 }
@@ -138,5 +169,18 @@ object GenericList extends App {
         }
     }))
 
+    println(Empty.add(1).add(3).add(2).add(4).sort((x: Int, y: Int) => y - x))
+    println(Empty.add(1).add(3).add(2).add(4).sort((x: Int, y: Int) => x - y))
+
+    println(Empty.add(1).add(3).add(2).add(4).zipWith(
+        Empty.add(0.3).add(2.0).add(4.1).add(5.12),
+        (x: Int, y: Double) => {
+            s"$x - $y"
+        }
+    ))
+
+    println(Empty.add(1).add(3).add(2).add(4).fold("List:")(
+        (x: String, y: Int) => s"$x $y"
+    ))
 
 }
